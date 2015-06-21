@@ -34,13 +34,23 @@
 
 #include "fancontrol.h"
 
-// As we enter whole numbers into fan speed we need to convert to a int
+/* 
+ * Fan needs a whole number for speed but we incrment in values of 0.1
+ * Hence convert the double from pow into a intger
+ * If we have a number with a decimal place round number up
+ */
 int power(double base, double exp) {
     double result = pow(base, exp);
     result = ceil(result);
     return (int) result;
 }
 
+/* 
+ * Read a positive integer from a file.
+ * Treats the entire file as one number
+ * Will return the integer
+ * Returns -1 on error
+ */
 int read_int_from_file(char * file_path){
     int integer = 0;
     FILE * file = fopen(file_path, "r");
@@ -55,7 +65,7 @@ int read_int_from_file(char * file_path){
 }
 
 /*
- * According to JimWright the fan onnly begins to move when set to 100
+ * According to JimWright the fan only begins to move when set to 100
  * after being set to 100 the fan can be run at reduced speeds
  * whever the fan has been stopped first set the speed to 100 to start the fan
  * refrence: https://forum.openwrt.org/viewtopic.php?pid=278818#p278818
@@ -79,6 +89,12 @@ void start_fan(){
     current_pwm = 127;
 }
 
+/*
+ * Sets fan speed
+ * Will change fan speed incrmentally untill it reaches the speed passed to it
+ * Speed is incrmented by a exponential curve based on 2^n
+ * n increments by 0.1
+ */
 void fan_set(int speed){
     target_pwm = speed;
  
