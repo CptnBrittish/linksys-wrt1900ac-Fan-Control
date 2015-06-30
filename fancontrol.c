@@ -34,7 +34,6 @@
 #include <errno.h>
 
 #include "fancontrol.h"
-#include "fan_settings.h"
 #include "fan_speed.h"
 #include "fan_mutex.h"
 
@@ -83,45 +82,70 @@ int main(void){
 
     // Main loop to read temp values and change target speed
     while(1){
-	//get tempreture values
+	/* 
+	 * Get tempreture values
+	 * If the file cannot be opened set tempretures to highest possible tempreture to be safe
+	 */
 	int cpu = read_int_from_file(cpu_file_path);
 	if(cpu == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open CPU Temperature");
-	    //Set to highest possible tempreture to be safe
-	    cpu = CPU_ON;
+	    cpu = 70000;
 	}
 
 	int ddr = read_int_from_file(ddr_file_path);
 	if(ddr == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open DDR Temperature");
-	    ddr = DDR_ON;
+	    ddr = 70000;
 	}
 
 	int wifi = read_int_from_file(wifi_file_path);
 	if(wifi == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open Wifi Temperature");
-	    wifi = WIFI_ON;
+	    wifi = 70000;
 	}
-
-	if((cpu > CPU_ON) && ((ddr > DDR_ON) || (wifi > WIFI_ON))){
+	// Check cpu tepretures and set appropriate speed
+	if(cpu >= 70000){
 	    pthread_mutex_lock(&target_pwm_lock);
 	    target_pwm = 255;
 	    pthread_mutex_unlock(&target_pwm_lock);
 
-	} else if ((cpu < CPU_OFF) && (ddr < DDR_OFF) && (wifi < WIFI_OFF)){
+	} else if (cpu >= 67500){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 223;
+	    pthread_mutex_unlock(&target_pwm_lock);
+
+	} else if (cpu >= 65){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 191;
+	    pthread_mutex_unlock(&target_pwm_lock);
+
+	} else if (cpu >= 62500){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 159;
+	    pthread_mutex_unlock(&target_pwm_lock);
+	} else if (cpu >= 60000){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 127;
+	    pthread_mutex_unlock(&target_pwm_lock);
+	} else if (cpu >= 55000){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 95;
+	    pthread_mutex_unlock(&target_pwm_lock);
+
+	} else if (cpu >= 50000){
+	    pthread_mutex_lock(&target_pwm_lock);
+	    target_pwm = 63;
+	    pthread_mutex_unlock(&target_pwm_lock);
+
+	} else if (cpu < 50000){
+	    // Prevent fan wear
 	    pthread_mutex_lock(&target_pwm_lock);
 	    target_pwm = 0;
 	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu < CPU_MID && ddr < DDR_MID && wifi < WIFI_MID){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 128;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
 	}
-	sleep(interval);
+	sleep(20);
     }      
 }
