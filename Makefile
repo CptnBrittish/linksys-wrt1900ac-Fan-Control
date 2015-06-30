@@ -1,5 +1,5 @@
 SFLAGS:=-std=c99
-LFLAGS:=-lm
+LFLAGS:=-lm -pthread -lc
 WFLAGS:=-Wall -Werror -pedantic
 BINARY:=fan_monitor
 
