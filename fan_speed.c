@@ -64,7 +64,6 @@ void start_fan(){
  * n increments by 0.1
  */
 void * fan_set(void * args){
-
     int * target_speed = ((fan_mutex *)args)->target_speed;
     current_pwm = ((fan_mutex *)args)->current_speed;
     pthread_mutex_t * target_speed_lock = ((fan_mutex *)args)->lock;
@@ -76,13 +75,15 @@ void * fan_set(void * args){
 	pthread_mutex_lock(target_speed_lock);
 	target_fan_speed = *target_speed;
 	pthread_mutex_unlock(target_speed_lock);
-
 	if(target_fan_speed > 0 && current_pwm == 0){
 	    start_fan();
 	}
 
 	if(target_fan_speed != current_pwm){
-
+	    // We cannot reduce fan speed to zero using powers hardcode zero option
+	    if((target_fan_speed == 0) && (current_pwm == 1)){
+		current_pwm = 0;
+	    }
 	    // Check if we need to increase fan speed
 	    if(target_fan_speed > current_pwm){
 		// We need to increase the exponate to create our new number
@@ -101,11 +102,12 @@ void * fan_set(void * args){
 		}
 	    }
 
+
 	    //Write current_pwm to device
 	    FILE * fan_speed_file = fopen(fan_file_path, "w");
 	    if(fan_speed_file != NULL){
 		// Notify of fan speed change
-		syslog(LOG_INFO, "Changing Fan speed to %i", current_pwm);
+		syslog(LOG_INFO, "Changing Fan speed to %i, target speed %i", current_pwm, target_fan_speed);
 		fprintf(fan_speed_file, "%d", current_pwm);
 		fclose(fan_speed_file);
 	    } else {

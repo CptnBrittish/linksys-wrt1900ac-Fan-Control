@@ -33,11 +33,15 @@
 #include <pthread.h>
 #include <errno.h>
 
+#include "emergency_temp_control.h"
 #include "fancontrol.h"
 #include "fan_speed.h"
 #include "fan_mutex.h"
+#include "tempreture_control.h"
 
 pthread_mutex_t target_pwm_lock;
+pthread_mutex_t tempreture_read_lock;
+pthread_mutex_t fan_write_lock;
 
 /* 
  * Read a positive integer from a file.
@@ -69,12 +73,35 @@ int main(void){
     // As we do not have threads yet we can change the variable without getting a lock
     target_pwm = fan_speed_parameters.current_speed;
 
-    // Fan thread id
-    pthread_t id;
+    tempreture_mutex tempreture_parameters;
+    tempreture_parameters.cpu_temp = &cpu;
+    tempreture_parameters.ddr_temp = &ddr;
+    tempreture_parameters.wifi_temp = &wifi;
+    tempreture_parameters.target_speed = &target_pwm;
+    tempreture_parameters.tempreture_lock = &tempreture_read_lock;
+    tempreture_parameters.fan_speed_write_lock = &fan_write_lock;
+    tempreture_parameters.fan_lock = &target_pwm_lock;;
+
+    // thread ids
+    pthread_t id[2];
 
     // Create threads
     pthread_mutex_init(&target_pwm_lock, NULL);
-    int err = pthread_create(&id, NULL, &fan_set, &fan_speed_parameters);
+    int err = pthread_create(&id[0], NULL, &fan_set, &fan_speed_parameters);
+    if(err){
+	syslog(LOG_CRIT, "Cannot create thread, exiting");
+	exit(EXIT_FAILURE);
+    }
+
+    pthread_mutex_init(&tempreture_read_lock, NULL);
+    pthread_mutex_init(&fan_write_lock, NULL);
+    err = pthread_create(&id[1], NULL, &emergency_temp_control, &tempreture_parameters);
+    if(err){
+	syslog(LOG_CRIT, "Cannot create thread, exiting");
+	exit(EXIT_FAILURE);
+    }
+
+    err = pthread_create(&id[2], NULL, &tempreture_control, &tempreture_parameters);
     if(err){
 	syslog(LOG_CRIT, "Cannot create thread, exiting");
 	exit(EXIT_FAILURE);
@@ -84,68 +111,29 @@ int main(void){
     while(1){
 	/* 
 	 * Get tempreture values
+	 * Put previous value in prev value var first
 	 * If the file cannot be opened set tempretures to highest possible tempreture to be safe
 	 */
-	int cpu = read_int_from_file(cpu_file_path);
+	pthread_mutex_lock(&tempreture_read_lock);
+	cpu = read_int_from_file(cpu_file_path);
 	if(cpu == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open CPU Temperature");
 	    cpu = 70000;
 	}
-
-	int ddr = read_int_from_file(ddr_file_path);
+	ddr = read_int_from_file(ddr_file_path);
 	if(ddr == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open DDR Temperature");
 	    ddr = 70000;
 	}
-
-	int wifi = read_int_from_file(wifi_file_path);
+	wifi = read_int_from_file(wifi_file_path);
 	if(wifi == -1){
 	    //Complain to std error
 	    syslog(LOG_ERR, "Cannot open Wifi Temperature");
 	    wifi = 70000;
 	}
-	// Check cpu tepretures and set appropriate speed
-	if(cpu >= 70000){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 255;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu >= 67500){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 223;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu >= 65){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 191;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu >= 62500){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 159;
-	    pthread_mutex_unlock(&target_pwm_lock);
-	} else if (cpu >= 60000){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 127;
-	    pthread_mutex_unlock(&target_pwm_lock);
-	} else if (cpu >= 55000){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 95;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu >= 50000){
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 63;
-	    pthread_mutex_unlock(&target_pwm_lock);
-
-	} else if (cpu < 50000){
-	    // Prevent fan wear
-	    pthread_mutex_lock(&target_pwm_lock);
-	    target_pwm = 0;
-	    pthread_mutex_unlock(&target_pwm_lock);
-	}
-	sleep(20);
-    }      
+	pthread_mutex_unlock(&tempreture_read_lock);
+	sleep(5);
+    }
 }
